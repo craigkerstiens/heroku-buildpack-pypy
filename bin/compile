@@ -15,6 +15,7 @@ PIP_DOWNLOAD_CACHE=${PIP_DOWNLOAD_CACHE:-$CACHE_DIR/pip_downloads}
 #VIRTUALENV_DIRS="bin include lib"
 VIRTUALENV_DIRS="bin include lib-python lib_pypy site-packages"
 VENDORED_MEMCACHED="http://cl.ly/0a191R3K160t1w1P0N25/vendor-libmemcached.tar.gz"
+VENDORED_PYPY="http://cl.ly/2L1i1W1F2Z0p0F2C3C1h"
 
 indent() {
   RE="s/^/       /"
@@ -22,7 +23,7 @@ indent() {
 }
 #tar -jxf $SRC_DIR/pypy-1.7-linux.tar.bz2 -C $SRC_DIR
 pushd $SRC_DIR
-curl -O http://api.cld.me/2L1i1W1F2Z0p0F2C3C1h/download/pypy-1.7-linux64.tar.bz2
+curl -s -L -O $VENDORED_PYPY
 popd
 tar -jxvf $SRC_DIR/pypy-1.7-linux64.tar.bz2 -C $SRC_DIR
 
