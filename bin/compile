@@ -21,6 +21,9 @@ indent() {
   [ $(uname) == "Darwin" ] && sed -l "$RE" || sed -u "$RE"
 }
 #tar -jxf $SRC_DIR/pypy-1.7-linux.tar.bz2 -C $SRC_DIR
+pushd $SRC_DIR
+curl -O http://api.cld.me/2L1i1W1F2Z0p0F2C3C1h/download/pypy-1.7-linux64.tar.bz2
+popd
 tar -jxvf $SRC_DIR/pypy-1.7-linux64.tar.bz2 -C $SRC_DIR
 
 
