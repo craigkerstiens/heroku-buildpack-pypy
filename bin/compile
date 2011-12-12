@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+set -eo pipefail
+
+BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
+ROOT_DIR=$(dirname $BIN_DIR)
+BUILD_DIR=$1
+CACHE_DIR=$2
+SRC_DIR=$ROOT_DIR/src
+PYPY_DIR=$SRC_DIR/pypy-1.7
+
+NAME=$($BIN_DIR/detect $BUILD_DIR)
+PIP_DOWNLOAD_CACHE=${PIP_DOWNLOAD_CACHE:-$CACHE_DIR/pip_downloads}
+#VIRTUALENV_DIRS="bin include lib"
+VIRTUALENV_DIRS="bin include lib-python lib_pypy site-packages"
+VENDORED_MEMCACHED="http://cl.ly/0a191R3K160t1w1P0N25/vendor-libmemcached.tar.gz"
+
+indent() {
+  RE="s/^/       /"
+  [ $(uname) == "Darwin" ] && sed -l "$RE" || sed -u "$RE"
+}
+#tar -jxf $SRC_DIR/pypy-1.7-linux.tar.bz2 -C $SRC_DIR
+tar -jxvf $SRC_DIR/pypy-1.7-linux64.tar.bz2 -C $SRC_DIR
+
+
+echo $SRC_DIR
+echo '``````'
+ls -al $SRC_DIR
+echo '-------------'
+ls $PYPY_DIR
+echo '-------------'
+
+# Add pypy executable to PATH
+PATH="$PATH:$PYPY_DIR/bin"
+pypy $ROOT_DIR/hello.py
+echo '-------------------------'
+
+
+virtualenv() {
+  pypy - "$@" <<EOF
+import sys
+sys.path.insert(0, "$ROOT_DIR/src/virtualenv-1.6.4")
+import virtualenv
+virtualenv.main()
+EOF
+}
+
+cd $BUILD_DIR
+
+# reject a non-packaged Django app
+if [ "$NAME" = "Python" ]; then
+  [ -f manage.py ] && [ -f settings.py ] && { echo " !     Django app must be in a package subdirectory"; exit 1; }
+fi
+
+# warn a checked-in virtualenv
+if [ -d "lib" ] || [ -d "bin" ]; then
+  echo " !     You have a virtualenv checked in. You should ignore the appropriate paths in your repo. See http://devcenter.heroku.com/articles/gitignore for more info.";
+fi
+
+# reject a conflicting checked-in virtualenv
+if [ -f "lib/python2.7" ]; then
+  echo " !     Checked-in virtualenv conflict."
+  exit 1;
+fi
+
+
+# copy artifacts out of cache if exists
+mkdir -p $CACHE_DIR
+for dir in $VIRTUALENV_DIRS; do
+  cp -R $CACHE_DIR/$dir . &> /dev/null || true
+done
+
+echo "-----> Preparing virtualenv version $(virtualenv --version)"
+virtualenv -p $PYPY_DIR/bin/pypy --no-site-packages . | indent
+#virtualenv --no-site-packages . | indent
+
+# create set-aside .heroku folder.
+mkdir .heroku
+
+
+# if pylibmc within requirements, use vendored libmemcached
+if (grep -Fxiq "pylibmc" requirements.txt) || (grep -Fiq "pylibmc=" requirements.txt)
+then
+    echo "-----> Noticed pylibmc. Bootstrapping libmemcached."
+    cd .heroku
+
+    if [ -d "vendor/lib/sasl2" ]; then
+      export LIBMEMCACHED=$(pwd)/vendor
+    else
+      curl -s -L -O $VENDORED_MEMCACHED
+      tar -zxvf vendor-libmemcached.tar.gz > /dev/null
+      rm vendor-libmemcached.tar.gz
+      export LIBMEMCACHED=$(pwd)/vendor
+    fi
+
+    export LIBMEMCACHED=$(pwd)/vendor
+    cd ..
+fi
+
+
+
+# if Django, append settings
+if [ "$NAME" = "Python/Django" ]; then
+  echo "-----> Django settings injection"
+
+  SETTINGS_FILE=$(ls **/settings.py | head -1)
+  PROJECT=$(dirname $SETTINGS_FILE)
+  echo "Injecting code into $SETTINGS_FILE to read from DATABASE_URL" | indent
+
+  cat >>$SETTINGS_FILE <<EOF
+
+import os, sys, urlparse
+urlparse.uses_netloc.append('postgres')
+urlparse.uses_netloc.append('mysql')
+try:
+<<<<<<< HEAD
+    if os.environ.has_key('DATABASE_URL') and DATABASES != None:
+=======
+
+    #check to make sure DATABASES is set in settings.py file.If not default to {}
+    try:
+        DATABASES
+    except NameError:
+        DATABASES = {}
+
+    if os.environ.has_key('DATABASE_URL'):
+>>>>>>> 743effb58ac1c5dfc678dbc4a6e4cc073ae0c197
+        url = urlparse.urlparse(os.environ['DATABASE_URL'])
+
+        DATABASES['default'] = {
+            'NAME':     url.path[1:],
+            'USER':     url.username,
+            'PASSWORD': url.password,
+            'HOST':     url.hostname,
+            'PORT':     url.port,
+        }
+        if url.scheme == 'postgres':
+            DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql_psycopg2'
+        if url.scheme == 'mysql':
+            DATABASES['default']['ENGINE'] = 'django.db.backends.mysql'
+except:
+    print "Unexpected error:", sys.exc_info()
+
+EOF
+fi
+
+if (grep -Fiq "hg+" requirements.txt) then
+  PIP_DOWNLOAD_CACHE=$PIP_DOWNLOAD_CACHE bin/pip install --use-mirrors mercurial | indent
+  source bin/activate
+fi
+
+echo "-----> Installing dependencies using pip version $(bin/pip --version | awk '{print $2}')"
+PIP_DOWNLOAD_CACHE=$PIP_DOWNLOAD_CACHE bin/pip install --use-mirrors -r requirements.txt | indent
+
+sed 's/pypy/python/g' ./bin/easy_install -i
+sed 's/pypy/python/g' ./bin/easy_install-2.7 -i
+sed 's/pypy/python/g' ./bin/pip -i
+sed 's/pypy/python/g' ./bin/pip-2.7 -i
+
+set +e
+OUT=$(virtualenv --relocatable .)
+[ $? -ne 0 ] && {
+  echo " !     Error making virtualenv relocatable"
+  echo "$OUT" | indent
+  exit 1
+}
+set -e
+
+# store new artifacts in cache
+for dir in $VIRTUALENV_DIRS; do
+  rm -rf $CACHE_DIR/$dir
+  cp -R $dir $CACHE_DIR/
+done
