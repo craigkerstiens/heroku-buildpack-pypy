@@ -75,6 +75,19 @@ for dir in $VIRTUALENV_DIRS; do
   cp -R $CACHE_DIR/$dir . &> /dev/null || true
 done
 
+echo "Getting path info"
+echo "-----------------"
+echo $PATH
+echo "-----------------"
+
+echo ""
+echo "Getting pypy info"
+echo "-----------------"
+echo $PYPY_DIR
+echo ls $PYPY_DIR
+echo "-----------------"
+
+
 echo "-----> Preparing virtualenv version $(virtualenv --version)"
 virtualenv -p $PYPY_DIR/bin/pypy --no-site-packages . | indent
 #virtualenv --no-site-packages . | indent
