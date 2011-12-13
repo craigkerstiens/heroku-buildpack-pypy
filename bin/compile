@@ -80,6 +80,11 @@ echo "-----------------"
 echo $PATH
 echo "-----------------"
 
+echo "Getting dir info"
+echo "-----------------"
+echo $PWD
+echo "-----------------"
+
 echo ""
 echo "Getting pypy info"
 echo "-----------------"
