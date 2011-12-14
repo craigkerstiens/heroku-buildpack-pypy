@@ -40,16 +40,6 @@ PATH="$PATH:$PYPY_DIR/bin"
 pypy $ROOT_DIR/hello.py
 echo '-------------------------'
 
-
-virtualenv() {
-  pypy - "$@" <<EOF
-import sys
-sys.path.insert(0, "$ROOT_DIR/src/virtualenv-1.6.4")
-import virtualenv
-virtualenv.main()
-EOF
-}
-
 cd $BUILD_DIR
 
 # reject a non-packaged Django app
@@ -94,7 +84,7 @@ echo "-----------------"
 
 
 echo "-----> Preparing virtualenv version $(virtualenv --version)"
-virtualenv -p $PYPY_DIR/bin/pypy --no-site-packages . | indent
+$ROOT_DIR/src/virtualenv -p $PYPY_DIR/bin/pypy --no-site-packages . | indent
 #virtualenv --no-site-packages . | indent
 
 # create set-aside .heroku folder.
